@@ -18,6 +18,13 @@ def test_ranking_export_rows_are_limited_and_use_requested_columns() -> None:
     assert rows[-1]["rank"] == TOP_CANDIDATE_EXPORT_LIMIT
 
 
+def test_ranking_export_rows_break_score_ties_by_candidate_id() -> None:
+    rows = ranking_export_rows([_score("CAND_0000002"), _score("CAND_0000001")])
+
+    assert rows[0]["candidate_id"] == "CAND_0000001"
+    assert rows[1]["candidate_id"] == "CAND_0000002"
+
+
 def test_rankings_to_csv_uses_scoring_reasoning_instead_of_generic_ai_text() -> None:
     scores = [_score("abc")]
     explanations = [
@@ -39,6 +46,46 @@ def test_rankings_to_csv_uses_scoring_reasoning_instead_of_generic_ai_text() -> 
     assert "Candidate demonstrates relevant Python capability" in rows[0]["reasoning"]
     assert "Key strengths:" in rows[0]["reasoning"]
     assert "Potential concerns:" in rows[0]["reasoning"]
+
+
+def test_scoring_reasoning_uses_candidate_specific_redrob_evidence() -> None:
+    score = CandidateScore(
+        candidate_id="CAND_0000001",
+        display_name="Candidate 1",
+        composite_score=88.0,
+        breakdown={},
+        matched_skills=["Python", "NLP"],
+        missing_skills=["Vector databases"],
+        strengths=[],
+        concerns=[],
+        integrity_flags=[],
+        raw_candidate={
+            "profile": {
+                "current_title": "Backend Engineer",
+                "years_of_experience": 6.9,
+                "location": "Toronto",
+                "country": "Canada",
+            },
+            "skills": [
+                {"name": "NLP", "proficiency": "advanced", "endorsements": 37, "duration_months": 26},
+                {"name": "React", "proficiency": "intermediate", "endorsements": 6, "duration_months": 35},
+            ],
+            "redrob_signals": {
+                "recruiter_response_rate": 0.34,
+                "notice_period_days": 60,
+                "preferred_work_mode": "onsite",
+                "skill_assessment_scores": {"NLP": 50},
+            },
+        },
+    )
+
+    reasoning = rankings_to_csv([score])
+    rows = list(csv.DictReader(StringIO(reasoning)))
+
+    assert "Backend Engineer with 6.9 yrs" in rows[0]["reasoning"]
+    assert "1 matched JD skills: NLP (advanced, 26 mo, 37 endorsements)" in rows[0]["reasoning"]
+    assert "response rate 0.34" in rows[0]["reasoning"]
+    assert "gaps: Vector databases" in rows[0]["reasoning"]
 
 
 def _score(candidate_id: str) -> CandidateScore:
