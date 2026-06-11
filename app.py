@@ -95,13 +95,27 @@ def _init_state(default_model: str) -> None:
 
 def _upload_tab(settings: Any) -> None:
     jd_file = st.file_uploader("Job Description", type=["pdf", "docx", "txt", "md"])
+
     upload_port = int(os.getenv("CANDIDATE_UPLOAD_PORT", "8765"))
     upload_host = os.getenv("CANDIDATE_UPLOAD_HOST", "127.0.0.1")
     upload_base_url = os.getenv("CANDIDATE_UPLOAD_PUBLIC_URL", f"http://127.0.0.1:{upload_port}")
     ensure_upload_server(upload_host, upload_port)
-    _candidate_upload_controls()
+
+    st.markdown("#### Candidate Dataset")
+    with st.expander("📋 How to upload your candidate file", expanded=True):
+        st.markdown(
+            """
+1. **Choose file** — click *Browse files* inside the upload card and select your `.jsonl` file from your computer.
+2. **Upload** — click **Upload JSONL** to start the chunked upload *(supports files up to 500 MB)*.
+3. **Confirm** — click **Refresh Upload Status** once the progress bar reaches 100% to verify completion.
+4. **Replace** — to swap the file at any point, click **Replace Candidate File** and repeat the steps above.
+            """
+        )
+
     _chunked_candidate_uploader(upload_base_url, st.session_state.upload_session_id)
+    _candidate_upload_controls()
     _render_candidate_upload_status()
+
     schema_file = st.file_uploader("Candidate Schema", type=["json"])
     if jd_file:
         st.session_state.jd_text = read_job_description(jd_file.name, jd_file.getvalue())
@@ -272,8 +286,8 @@ def _chunked_candidate_uploader(upload_base_url: str, session_id: str) -> None:
                 border: 1px solid #d6d9df;
                 border-radius: 8px;
                 padding: 16px;
-                background: #ffffff;
-                color: #262730;
+                background: #000000;
+                color: #ffffff;
             }}
 
             .upload-row {{
@@ -310,7 +324,7 @@ def _chunked_candidate_uploader(upload_base_url: str, session_id: str) -> None:
 
             .file-meta {{
                 margin-top: 10px;
-                color: #555867;
+                color: #ffffff;
                 font-size: 13px;
             }}
 
@@ -341,7 +355,7 @@ def _chunked_candidate_uploader(upload_base_url: str, session_id: str) -> None:
         </style>
 
         <div class="upload-card">
-            <div class="upload-title">Candidate Dataset</div>
+            <div class="upload-title">Browse & Upload</div>
             <div class="upload-row">
                 <input id="candidate-file" type="file" accept=".jsonl" />
                 <button id="upload-button" class="upload-btn">Upload JSONL</button>
@@ -567,7 +581,7 @@ def _chunked_candidate_uploader(upload_base_url: str, session_id: str) -> None:
             }});
         </script>
         """,
-        height=340,
+        height=220,
     )
 
 
