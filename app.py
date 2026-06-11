@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 import uuid
 from typing import Any
 
@@ -87,6 +88,8 @@ def _init_state(default_model: str) -> None:
         "upload_session_id": uuid.uuid4().hex,
         "result": None,
         "pipeline_status": "Waiting for uploads",
+        "upload_polling_active": False,
+        "last_upload_check": 0.0,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -133,6 +136,7 @@ def _upload_tab(settings: Any) -> None:
                 reset_session_upload(st.session_state.upload_session_id, delete_file=True)
                 st.session_state.upload_session_id = uuid.uuid4().hex
                 st.session_state.candidate_upload = None
+                st.session_state.upload_polling_active = False
                 st.success("Ranking complete")
                 st.info("Uploaded candidate file deleted from temporary storage.")
             except Exception as exc:
@@ -249,13 +253,16 @@ def _candidate_upload_controls() -> None:
     with left:
         if st.button("Refresh Upload Status", use_container_width=True):
             _refresh_candidate_upload()
+            st.rerun()
     with right:
         if st.button("Replace Candidate File", use_container_width=True):
             reset_session_upload(st.session_state.upload_session_id, delete_file=True)
             st.session_state.upload_session_id = uuid.uuid4().hex
             st.session_state.candidate_upload = None
+            st.session_state.upload_polling_active = False
             st.session_state.result = None
             st.session_state.pipeline_status = "Waiting for uploads"
+            st.session_state.last_upload_check = 0.0
             st.rerun()
 
 
@@ -550,10 +557,7 @@ def _chunked_candidate_uploader(upload_base_url: str, session_id: str) -> None:
                         );
 
                     progress.value = 100;
-
-                    setStatus(
-                        "Upload completed. Click Refresh Upload Status above if the ready state has not appeared."
-                    );
+                    setStatus("Upload completed. Syncing...");
 
                 }}
                 catch(err) {{
@@ -572,6 +576,7 @@ def _chunked_candidate_uploader(upload_base_url: str, session_id: str) -> None:
 
 
 def _refresh_candidate_upload() -> None:
+    """Fetch latest upload state from server."""
     state = latest_session_upload(st.session_state.upload_session_id)
     st.session_state.candidate_upload = None if state is None else {
         "upload_id": state.upload_id,
@@ -582,8 +587,11 @@ def _refresh_candidate_upload() -> None:
         "complete": state.complete,
         "error": state.error,
     }
+    st.session_state.last_upload_check = time.time()
+
 
 def _render_candidate_upload_status() -> None:
+    """Display upload status with smart auto-polling."""
     _refresh_candidate_upload()
 
     upload = st.session_state.candidate_upload
@@ -591,49 +599,27 @@ def _render_candidate_upload_status() -> None:
     st.subheader("Candidate Upload Status")
 
     if not upload:
-        st.info(
-            "No candidate dataset uploaded yet."
-        )
+        st.info("No candidate dataset uploaded yet.")
         return
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric(
-            "File",
-            upload["filename"]
-        )
+        st.metric("File", upload["filename"])
 
     with col2:
-        st.metric(
-            "Size",
-            f"{upload['size']/1024/1024:.1f} MB"
-        )
+        st.metric("Size", f"{upload['size']/1024/1024:.1f} MB")
 
     with col3:
-        st.metric(
-            "Received",
-            f"{upload['received']/1024/1024:.1f} MB"
-        )
+        st.metric("Received", f"{upload['received']/1024/1024:.1f} MB")
 
     with col4:
-        st.metric(
-            "Status",
-            "Ready" if upload.get("complete")
-            else "Uploading"
-        )
+        st.metric("Status", "Ready" if upload.get("complete") else "Uploading")
 
-    percent = (
-        upload["received"] /
-        upload["size"] * 100
-    ) if upload["size"] else 0
-
-    st.progress(
-        min(100, int(percent))
-    )
+    percent = (upload["received"] / upload["size"] * 100) if upload["size"] else 0
+    st.progress(min(100, int(percent)))
 
     if upload.get("complete"):
-
         st.success(
             f"""
             Candidate dataset ready
@@ -645,22 +631,20 @@ def _render_candidate_upload_status() -> None:
             Ready for ranking.
             """
         )
-
+        st.session_state.upload_polling_active = False
     elif upload.get("error"):
-
-        st.error(
-            upload["error"]
-        )
-
+        st.error(upload["error"])
+        st.session_state.upload_polling_active = False
     else:
+        st.info(f"Uploading... {percent:.1f}%")
+        # Auto-poll: check every 1.5 seconds if not complete
+        current_time = time.time()
+        if not st.session_state.upload_polling_active or (current_time - st.session_state.last_upload_check) >= 1.5:
+            st.session_state.upload_polling_active = True
+            time.sleep(1.5)
+            st.rerun()
 
-        st.info(
-            f"Uploading... {percent:.1f}%"
-        )
-
-    st.caption(
-        f"Stored at: {upload.get('path','N/A')}"
-    )
+    st.caption(f"Stored at: {upload.get('path', 'N/A')}")
 
 
 def _show_upload_limit_warning() -> None:
@@ -672,6 +656,7 @@ def _show_upload_limit_warning() -> None:
             f"{CANDIDATE_UPLOAD_LIMIT_MB}MB. Restart with "
             "`streamlit run app.py --server.maxUploadSize=500 --server.maxMessageSize=500`."
         )
+
 
 if __name__ == "__main__":
     main()
