@@ -39,14 +39,32 @@ def ranking_export_rows(
     """Build display/export rows for the top ranked candidates."""
 
     ordered_scores = sorted(scores, key=lambda score: (-score.composite_score, score.candidate_id))
+    export_scores = ordered_scores[:limit]
+    normalized_scores = _normalized_export_scores(export_scores)
     return [
         {
             "candidate_id": score.candidate_id,
             "rank": index + 1,
-            "score": score.composite_score,
+            "score": f"{normalized_scores[index]:.4f}",
             "reasoning": scoring_reasoning(score),
         }
-        for index, score in enumerate(ordered_scores[:limit])
+        for index, score in enumerate(export_scores)
+    ]
+
+
+def _normalized_export_scores(scores: list[CandidateScore]) -> list[float]:
+    """Min-max normalize only the scores shown in the exported CSV."""
+
+    if not scores:
+        return []
+    raw_scores = [score.composite_score for score in scores]
+    min_score = min(raw_scores)
+    max_score = max(raw_scores)
+    if max_score == min_score:
+        return [1.0 for _ in raw_scores]
+    return [
+        0.1 + 0.9 * ((score - min_score) / (max_score - min_score))
+        for score in raw_scores
     ]
 
 

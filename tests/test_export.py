@@ -42,10 +42,34 @@ def test_rankings_to_csv_uses_scoring_reasoning_instead_of_generic_ai_text() -> 
 
     assert rows[0]["candidate_id"] == "abc"
     assert rows[0]["rank"] == "1"
-    assert rows[0]["score"] == "91.5"
+    assert rows[0]["score"] == "1.0000"
     assert "Candidate demonstrates relevant Python capability" in rows[0]["reasoning"]
     assert "Key strengths:" in rows[0]["reasoning"]
     assert "Potential concerns:" in rows[0]["reasoning"]
+
+
+def test_ranking_export_rows_normalize_only_exported_scores() -> None:
+    scores = [
+        _score("CAND_0000001", 52.11),
+        _score("CAND_0000002", 51.67),
+        _score("CAND_0000003", 51.11),
+    ]
+    original_ids = [score.candidate_id for score in scores]
+    original_scores = [score.composite_score for score in scores]
+    original_reasoning = [ranking_export_rows([score])[0]["reasoning"] for score in scores]
+
+    rows = ranking_export_rows(scores)
+
+    assert [row["candidate_id"] for row in rows] == original_ids
+    assert [score.composite_score for score in scores] == original_scores
+    assert [row["reasoning"] for row in rows] == original_reasoning
+    assert [row["score"] for row in rows] == ["1.0000", "0.6040", "0.1000"]
+
+
+def test_ranking_export_rows_normalize_equal_scores_to_one() -> None:
+    rows = ranking_export_rows([_score("CAND_0000001", 51.11), _score("CAND_0000002", 51.11)])
+
+    assert [row["score"] for row in rows] == ["1.0000", "1.0000"]
 
 
 def test_scoring_reasoning_uses_candidate_specific_redrob_evidence() -> None:
@@ -88,11 +112,11 @@ def test_scoring_reasoning_uses_candidate_specific_redrob_evidence() -> None:
     assert "gaps: Vector databases" in rows[0]["reasoning"]
 
 
-def _score(candidate_id: str) -> CandidateScore:
+def _score(candidate_id: str, composite_score: float = 91.5) -> CandidateScore:
     return CandidateScore(
         candidate_id=candidate_id,
         display_name=f"Candidate {candidate_id}",
-        composite_score=91.5,
+        composite_score=composite_score,
         breakdown={"skill_overlap": 95.0},
         matched_skills=["Python"],
         missing_skills=[],
