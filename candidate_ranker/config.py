@@ -36,5 +36,4 @@ def load_settings() -> Settings:
         enable_ai_explanations=os.getenv("APP_ENABLE_AI_EXPLANATIONS", "0").lower()
         in {"1", "true", "yes", "on"},
     )
-    LOGGER.info("Loaded settings: %s", settings)
     return settings

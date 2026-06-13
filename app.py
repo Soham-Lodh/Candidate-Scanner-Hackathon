@@ -42,13 +42,13 @@ def main() -> None:
     _show_upload_limit_warning()
     settings = load_settings()
     _init_state(settings.openrouter_primary_model)
-    with st.sidebar:
-        st.header("Model")
-        label_by_id = {value: key for key, value in MODEL_OPTIONS.items()}
-        current_label = label_by_id.get(st.session_state.selected_model, "DeepSeek V3")
-        selected_label = st.selectbox("OpenRouter model", list(MODEL_OPTIONS), index=list(MODEL_OPTIONS).index(current_label))
-        st.session_state.selected_model = MODEL_OPTIONS[selected_label]
-        st.caption(st.session_state.selected_model)
+    # with st.sidebar:
+    #     st.header("Model")
+    #     label_by_id = {value: key for key, value in MODEL_OPTIONS.items()}
+    #     current_label = label_by_id.get(st.session_state.selected_model, "DeepSeek V3")
+    #     selected_label = st.selectbox("OpenRouter model", list(MODEL_OPTIONS), index=list(MODEL_OPTIONS).index(current_label))
+    #     st.session_state.selected_model = MODEL_OPTIONS[selected_label]
+    #     st.caption(st.session_state.selected_model)
     tabs = st.tabs(
         [
             "Upload",
