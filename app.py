@@ -156,10 +156,10 @@ def _upload_tab(settings: Any) -> None:
 
     if is_streamlit_cloud():
 
-        st.info(
-            "Running on Streamlit Cloud. "
-            "Using native Streamlit uploader."
-        )
+        # st.info(
+        #     "Running on Streamlit Cloud. "
+        #     "Using native Streamlit uploader."
+        # )
 
         _streamlit_candidate_uploader()
 
