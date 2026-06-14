@@ -1,7 +1,7 @@
 """Streamlit UI for the AI Candidate Ranking Platform."""
 
 from __future__ import annotations
-
+import tempfile
 import asyncio
 import logging
 import os
@@ -95,48 +95,148 @@ def _init_state(default_model: str) -> None:
         if key not in st.session_state:
             st.session_state[key] = value
 
+def is_streamlit_cloud() -> bool:
+    return os.getenv("DEPLOYMENT_TARGET", "").lower() == "streamlit"
+
+
+def _streamlit_candidate_uploader() -> None:
+    candidate_file = st.file_uploader(
+        "Candidate Dataset",
+        type=["jsonl"],
+        key="candidate_dataset",
+    )
+
+    if candidate_file is None:
+        return
+
+    tmp = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".jsonl",
+    )
+
+    tmp.write(candidate_file.getbuffer())
+    tmp.close()
+
+    st.session_state.candidate_upload = {
+        "upload_id": "streamlit-upload",
+        "filename": candidate_file.name,
+        "path": tmp.name,
+        "size": candidate_file.size,
+        "received": candidate_file.size,
+        "complete": True,
+        "error": None,
+    }
+
+    st.success(
+        f"Uploaded {candidate_file.name} "
+        f"({candidate_file.size / 1024 / 1024:.1f} MB)"
+    )
 
 def _upload_tab(settings: Any) -> None:
-    jd_file = st.file_uploader("Job Description", type=["pdf", "docx", "txt", "md"])
+    jd_file = st.file_uploader(
+        "Job Description",
+        type=["pdf", "docx", "txt", "md"]
+    )
 
-    upload_port = int(os.getenv("CANDIDATE_UPLOAD_PORT", "8765"))
-    upload_host = os.getenv("CANDIDATE_UPLOAD_HOST", "127.0.0.1")
-    upload_base_url = os.getenv("CANDIDATE_UPLOAD_PUBLIC_URL", f"http://127.0.0.1:{upload_port}")
-    ensure_upload_server(upload_host, upload_port)
+    upload_port = int(
+        os.getenv("CANDIDATE_UPLOAD_PORT", "8765")
+    )
+
+    upload_host = os.getenv(
+        "CANDIDATE_UPLOAD_HOST",
+        "127.0.0.1"
+    )
+
+    upload_base_url = os.getenv(
+        "CANDIDATE_UPLOAD_PUBLIC_URL",
+        f"http://127.0.0.1:{upload_port}"
+    )
 
     st.markdown("#### Candidate Dataset")
-    with st.expander("📋 How to upload your candidate file", expanded=True):
-        st.markdown(
-            """
-1. **Choose file** — click *Browse files* inside the upload card and select your `.jsonl` file from your computer.
-2. **Upload** — click **Upload JSONL** to start the chunked upload *(supports files up to 500 MB)*.
-3. **Confirm** — click **Refresh Upload Status** once the progress bar reaches 100% to verify completion.
-4. **Replace** — to swap the file at any point, click **Replace Candidate File** and repeat the steps above.
-            """
+
+    if is_streamlit_cloud():
+
+        st.info(
+            "Running on Streamlit Cloud. "
+            "Using native Streamlit uploader."
         )
 
-    _chunked_candidate_uploader(upload_base_url, st.session_state.upload_session_id)
-    _candidate_upload_controls()
-    _render_candidate_upload_status()
+        _streamlit_candidate_uploader()
 
-    schema_file = st.file_uploader("Candidate Schema", type=["json"])
+    else:
+
+        ensure_upload_server(
+            upload_host,
+            upload_port
+        )
+
+        with st.expander(
+            "📋 How to upload your candidate file",
+            expanded=True
+        ):
+            st.markdown(
+                """
+1. **Choose file** — click *Browse files* inside the upload card and select your `.jsonl` file from your computer.
+
+2. **Upload** — click **Upload JSONL** to start the chunked upload *(supports files up to 500 MB)*.
+
+3. **Confirm** — click **Refresh Upload Status** once the progress bar reaches 100% to verify completion.
+
+4. **Replace** — to swap the file at any point, click **Replace Candidate File** and repeat the steps above.
+                """
+            )
+
+        _chunked_candidate_uploader(
+            upload_base_url,
+            st.session_state.upload_session_id
+        )
+
+        _candidate_upload_controls()
+        _render_candidate_upload_status()
+
+    schema_file = st.file_uploader(
+        "Candidate Schema",
+        type=["json"]
+    )
+
     if jd_file:
-        st.session_state.jd_text = read_job_description(jd_file.name, jd_file.getvalue())
-        st.success(f"Loaded job description ({len(st.session_state.jd_text):,} characters)")
+        st.session_state.jd_text = read_job_description(
+            jd_file.name,
+            jd_file.getvalue()
+        )
+
+        st.success(
+            f"Loaded job description "
+            f"({len(st.session_state.jd_text):,} characters)"
+        )
+
     if schema_file:
-        st.session_state.schema = read_schema(schema_file.getvalue())
+        st.session_state.schema = read_schema(
+            schema_file.getvalue()
+        )
+
         st.success("Loaded candidate schema")
+
     candidate_upload = st.session_state.candidate_upload
+
     ready = bool(
         st.session_state.jd_text
         and candidate_upload
         and candidate_upload.get("complete")
         and st.session_state.schema
     )
-    if st.button("Run Ranking", disabled=not ready, type="primary"):
-        with st.spinner("Running retrieval, scoring, and OpenRouter AI calls..."):
+
+    if st.button(
+        "Run Ranking",
+        disabled=not ready,
+        type="primary"
+    ):
+        with st.spinner(
+            "Running retrieval, scoring, and OpenRouter AI calls..."
+        ):
             try:
                 st.session_state.pipeline_status = "Running"
+
                 st.session_state.result = asyncio.run(
                     run_pipeline_from_jsonl(
                         jd_text=st.session_state.jd_text,
@@ -146,16 +246,31 @@ def _upload_tab(settings: Any) -> None:
                         model=st.session_state.selected_model,
                     )
                 )
+
                 st.session_state.pipeline_status = "Complete"
-                reset_session_upload(st.session_state.upload_session_id, delete_file=True)
+
+                if not is_streamlit_cloud():
+                    reset_session_upload(
+                        st.session_state.upload_session_id,
+                        delete_file=True
+                    )
+
                 st.session_state.upload_session_id = uuid.uuid4().hex
                 st.session_state.candidate_upload = None
                 st.session_state.upload_polling_active = False
+
                 st.success("Ranking complete")
-                st.info("Uploaded candidate file deleted from temporary storage.")
+
+                if not is_streamlit_cloud():
+                    st.info(
+                        "Uploaded candidate file deleted from temporary storage."
+                    )
+
             except Exception as exc:
                 st.session_state.pipeline_status = f"Failed: {exc}"
+
                 LOGGER.exception("Pipeline failed")
+
                 st.error(str(exc))
 
 
