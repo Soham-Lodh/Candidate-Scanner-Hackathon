@@ -658,7 +658,6 @@ def _render_candidate_upload_status() -> None:
             time.sleep(1.5)
             st.rerun()
 
-    st.caption(f"Stored at: {upload.get('path', 'N/A')}")
 
 
 def _show_upload_limit_warning() -> None:
