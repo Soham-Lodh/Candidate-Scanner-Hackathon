@@ -130,6 +130,7 @@ cd candidate-scanner-hackathon
 python -m venv .venv
 source .venv/bin/activate       # macOS/Linux
 .venv\Scripts\activate          # Windows
+source .venv/Scripts/activate   #GitBash Terminal
 
 # 3. Install dependencies
 pip install -r requirements.txt

@@ -45,7 +45,7 @@ def ranking_export_rows(
         {
             "candidate_id": score.candidate_id,
             "rank": index + 1,
-            "score": f"{normalized_scores[index]:.4f}",
+            "score": f"{normalized_scores[index]:.8f}",
             "reasoning": scoring_reasoning(score),
         }
         for index, score in enumerate(export_scores)
