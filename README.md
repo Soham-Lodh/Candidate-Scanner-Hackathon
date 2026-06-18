@@ -147,6 +147,26 @@ The app will open at `http://localhost:8501`.
 
 ---
 
+## Stage 3 Code Reproduction
+
+Run the same ranking pipeline used by the Streamlit app without opening the UI:
+
+```bash
+python rank.py \
+  --candidates candidates.jsonl.gz \
+  --job-description job_description.md \
+  --schema candidate_schema.json \
+  --out submission.csv
+```
+
+The candidate file may be `.jsonl` or `.jsonl.gz`. The generated `submission.csv` contains exactly:
+
+```text
+candidate_id,rank,score,reasoning
+```
+
+---
+
 ## Environment Variables
 
 | Variable | Required | Description |

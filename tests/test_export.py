@@ -42,7 +42,7 @@ def test_rankings_to_csv_uses_scoring_reasoning_instead_of_generic_ai_text() -> 
 
     assert rows[0]["candidate_id"] == "abc"
     assert rows[0]["rank"] == "1"
-    assert rows[0]["score"] == "1.0000"
+    assert rows[0]["score"] == "1.00000000"
     assert "Candidate demonstrates relevant Python capability" in rows[0]["reasoning"]
     assert "Key strengths:" in rows[0]["reasoning"]
     assert "Potential concerns:" in rows[0]["reasoning"]
@@ -63,13 +63,13 @@ def test_ranking_export_rows_normalize_only_exported_scores() -> None:
     assert [row["candidate_id"] for row in rows] == original_ids
     assert [score.composite_score for score in scores] == original_scores
     assert [row["reasoning"] for row in rows] == original_reasoning
-    assert [row["score"] for row in rows] == ["1.0000", "0.6040", "0.1000"]
+    assert [row["score"] for row in rows] == ["1.00000000", "0.60400000", "0.10000000"]
 
 
 def test_ranking_export_rows_normalize_equal_scores_to_one() -> None:
     rows = ranking_export_rows([_score("CAND_0000001", 51.11), _score("CAND_0000002", 51.11)])
 
-    assert [row["score"] for row in rows] == ["1.0000", "1.0000"]
+    assert [row["score"] for row in rows] == ["1.00000000", "1.00000000"]
 
 
 def test_scoring_reasoning_uses_candidate_specific_redrob_evidence() -> None:
@@ -91,8 +91,18 @@ def test_scoring_reasoning_uses_candidate_specific_redrob_evidence() -> None:
                 "country": "Canada",
             },
             "skills": [
-                {"name": "NLP", "proficiency": "advanced", "endorsements": 37, "duration_months": 26},
-                {"name": "React", "proficiency": "intermediate", "endorsements": 6, "duration_months": 35},
+                {
+                    "name": "NLP",
+                    "proficiency": "advanced",
+                    "endorsements": 37,
+                    "duration_months": 26,
+                },
+                {
+                    "name": "React",
+                    "proficiency": "intermediate",
+                    "endorsements": 6,
+                    "duration_months": 35,
+                },
             ],
             "redrob_signals": {
                 "recruiter_response_rate": 0.34,
