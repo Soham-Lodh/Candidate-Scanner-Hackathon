@@ -167,10 +167,10 @@ Stage 3 uses a two-phase flow so the final ranking step is fully offline.
 Run this once per job description. This step requires internet access, calls OpenRouter, and generates a reusable JD cache.
 
 ```bash
-python prepare.py \
-    --job-description ./job_description.md \
-    --schema ./candidate_schema.json \
-    --out ./jd_cache.json
+python prepare.py `
+  --job-description test2/job_description.md `
+  --schema test2/candidate_schema.json `
+  --out jd_cache.json
 ```
 
 ### Phase 2 - Offline Ranking
@@ -178,11 +178,11 @@ python prepare.py \
 This is the command used to generate the submission CSV. It performs no hosted LLM calls and no network requests.
 
 ```bash
-python rank.py \
-    --candidates ./candidates.jsonl \
-    --jd-cache ./jd_cache.json \
-    --schema ./candidate_schema.json \
-    --out ./submission.csv
+python rank.py `
+  --candidates test2/candidates.jsonl `
+  --jd-cache jd_cache.json `
+  --schema test2/candidate_schema.json `
+  --out submission.csv
 ```
 
 Candidates may be either `.jsonl` or `.jsonl.gz`.
