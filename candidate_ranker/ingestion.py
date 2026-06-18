@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import logging
-from io import BytesIO, StringIO
+from collections.abc import Iterator
+from io import BytesIO
 from pathlib import Path
-from typing import Any, BinaryIO, Iterator
+from typing import Any, BinaryIO
 
 import pandas as pd
 
@@ -70,7 +72,11 @@ def read_candidates(name: str, content: bytes | BinaryIO) -> list[dict[str, Any]
     if not isinstance(rows, list):
         raise ValueError("Candidate dataset must contain a list of records.")
     if normalized is None:
-        normalized = [dict(row, _row_id=index + 1) for index, row in enumerate(rows) if isinstance(row, dict)]
+        normalized = [
+            dict(row, _row_id=index + 1)
+            for index, row in enumerate(rows)
+            if isinstance(row, dict)
+        ]
     LOGGER.info("Loaded %s candidate records", len(normalized))
     return normalized
 
@@ -78,7 +84,13 @@ def read_candidates(name: str, content: bytes | BinaryIO) -> list[dict[str, Any]
 def iter_jsonl_candidates(path: str | Path) -> Iterator[dict[str, Any]]:
     """Yield JSONL candidate records from disk without loading the file into memory."""
 
-    with Path(path).open("rb") as stream:
+    candidate_path = Path(path)
+    opener = (
+        gzip.open
+        if "".join(candidate_path.suffixes[-2:]).lower() == ".jsonl.gz"
+        else Path.open
+    )
+    with opener(candidate_path, "rb") as stream:
         for line_number, raw_line in enumerate(stream, start=1):
             line = raw_line.strip()
             if not line:
