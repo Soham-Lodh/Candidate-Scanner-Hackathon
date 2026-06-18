@@ -40,31 +40,8 @@ async def run_pipeline(
     schema_map = build_schema_map(schema)
     jd_intelligence = await extract_jd_intelligence(jd_text, schema_map, model=model)
     retrieved = SemanticRetriever().retrieve(jd_text, candidates, settings.top_k_retrieval)
-    feature_ranked = rank_candidates(retrieved, jd_intelligence, schema_map, settings.top_k_features)
-    integrity_slice = feature_ranked[: min(settings.top_k_explain, len(feature_ranked))]
-    explanations = (
-        await generate_candidate_explanations(jd_intelligence, integrity_slice, model=model)
-        if settings.enable_ai_explanations
-        else ExplanationBatch()
-    )
-    LOGGER.info("Pipeline completed with %s final ranked candidates", len(feature_ranked))
-    return RankingResult(schema_map, jd_intelligence, feature_ranked, explanations)
-
-
-async def run_pipeline_from_jsonl(
-    *,
-    jd_text: str,
-    candidate_path: str,
-    schema: dict[str, Any],
-    settings: Settings,
-    model: str,
-) -> RankingResult:
-    """Run ranking from a disk-backed JSONL candidate file."""
-
-    schema_map = build_schema_map(schema)
-    jd_intelligence = await extract_jd_intelligence(jd_text, schema_map, model=model)
-    feature_ranked = rank_candidates_stream(
-        iter_jsonl_candidates(candidate_path),
+    feature_ranked = rank_candidates(
+        retrieved,
         jd_intelligence,
         schema_map,
         settings.top_k_features,
@@ -75,5 +52,52 @@ async def run_pipeline_from_jsonl(
         if settings.enable_ai_explanations
         else ExplanationBatch()
     )
-    LOGGER.info("Disk-backed pipeline completed with %s final ranked candidates", len(feature_ranked))
+    LOGGER.info("Pipeline completed with %s final ranked candidates", len(feature_ranked))
+    return RankingResult(schema_map, jd_intelligence, feature_ranked, explanations)
+
+
+async def prepare_jd_intelligence(
+    *,
+    jd_text: str,
+    schema: dict[str, Any],
+    model: str,
+) -> JDIntelligence:
+    """Extract reusable JD intelligence for later offline ranking."""
+
+    schema_map = build_schema_map(schema)
+    return await extract_jd_intelligence(jd_text, schema_map, model=model)
+
+
+async def run_pipeline_from_jsonl(
+    *,
+    candidate_path: str,
+    schema: dict[str, Any],
+    settings: Settings,
+    jd_text: str | None = None,
+    model: str | None = None,
+    jd_intelligence: JDIntelligence | None = None,
+) -> RankingResult:
+    """Run ranking from a disk-backed JSONL candidate file."""
+
+    schema_map = build_schema_map(schema)
+    if jd_intelligence is None:
+        if jd_text is None or model is None:
+            raise ValueError("Either cached JD intelligence or jd_text plus model is required.")
+        jd_intelligence = await extract_jd_intelligence(jd_text, schema_map, model=model)
+    feature_ranked = rank_candidates_stream(
+        iter_jsonl_candidates(candidate_path),
+        jd_intelligence,
+        schema_map,
+        settings.top_k_features,
+    )
+    integrity_slice = feature_ranked[: min(settings.top_k_explain, len(feature_ranked))]
+    explanations = (
+        await generate_candidate_explanations(jd_intelligence, integrity_slice, model=model)
+        if settings.enable_ai_explanations and model is not None
+        else ExplanationBatch()
+    )
+    LOGGER.info(
+        "Disk-backed pipeline completed with %s final ranked candidates",
+        len(feature_ranked),
+    )
     return RankingResult(schema_map, jd_intelligence, feature_ranked, explanations)

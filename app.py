@@ -1,10 +1,13 @@
 """Professional UI redesign - AI Candidate Ranking Platform."""
 
 from __future__ import annotations
-import tempfile
+
 import asyncio
+import hashlib
+import json
 import logging
 import os
+import tempfile
 import time
 import uuid
 from typing import Any
@@ -23,7 +26,7 @@ from candidate_ranker.export import (
     scoring_reasoning,
 )
 from candidate_ranker.ingestion import read_job_description, read_schema
-from candidate_ranker.models import MODEL_OPTIONS
+from candidate_ranker.models import JDIntelligence
 from candidate_ranker.schema_mapping import build_schema_map
 from candidate_ranker.services import RankingResult, run_pipeline_from_jsonl
 from candidate_ranker.upload_server import ensure_upload_server, latest_session_upload, reset_session_upload
@@ -425,6 +428,8 @@ def _init_state(default_model: str) -> None:
         "jd_text": "",
         "schema": None,
         "candidate_upload": None,
+        "jd_intelligence": None,
+        "jd_intelligence_cache_key": "",
         "upload_session_id": uuid.uuid4().hex,
         "result": None,
         "pipeline_status": "Ready",
@@ -434,6 +439,24 @@ def _init_state(default_model: str) -> None:
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+
+def _jd_intelligence_cache_key(jd_text: str, schema: dict[str, Any], model: str) -> str:
+    """Build a stable cache key for the uploaded JD, schema, and selected model."""
+
+    payload = json.dumps(
+        {"jd_text": jd_text, "schema": schema, "model": model},
+        sort_keys=True,
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _cached_jd_intelligence(cache_key: str) -> JDIntelligence | None:
+    if st.session_state.get("jd_intelligence_cache_key") != cache_key:
+        return None
+    cached = st.session_state.get("jd_intelligence")
+    return cached if isinstance(cached, JDIntelligence) else None
 
 
 def is_streamlit_cloud() -> bool:
@@ -668,6 +691,12 @@ def _run_ranking_pipeline(settings: Any) -> None:
 
         with st.spinner("Running final analysis..."):
             candidate_upload = st.session_state.candidate_upload
+            cache_key = _jd_intelligence_cache_key(
+                st.session_state.jd_text,
+                st.session_state.schema,
+                st.session_state.selected_model,
+            )
+            jd_intelligence = _cached_jd_intelligence(cache_key)
             st.session_state.result = asyncio.run(
                 run_pipeline_from_jsonl(
                     jd_text=st.session_state.jd_text,
@@ -675,8 +704,11 @@ def _run_ranking_pipeline(settings: Any) -> None:
                     schema=st.session_state.schema,
                     settings=settings,
                     model=st.session_state.selected_model,
+                    jd_intelligence=jd_intelligence,
                 )
             )
+            st.session_state.jd_intelligence = st.session_state.result.jd_intelligence
+            st.session_state.jd_intelligence_cache_key = cache_key
 
         progress_bar.progress(1.0)
         status_placeholder.empty()
