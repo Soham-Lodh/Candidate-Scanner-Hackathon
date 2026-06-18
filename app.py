@@ -6,14 +6,12 @@ import asyncio
 import logging
 import os
 import time
-import uuid
 from typing import Any
 
 import altair as alt
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import streamlit.components.v1 as components
 
 from candidate_ranker.config import load_settings
 from candidate_ranker.export import (
@@ -26,12 +24,10 @@ from candidate_ranker.ingestion import read_job_description, read_schema
 from candidate_ranker.models import MODEL_OPTIONS
 from candidate_ranker.schema_mapping import build_schema_map
 from candidate_ranker.services import RankingResult, run_pipeline_from_jsonl
-from candidate_ranker.upload_server import ensure_upload_server, latest_session_upload, reset_session_upload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 LOGGER = logging.getLogger(__name__)
 CANDIDATE_UPLOAD_LIMIT_MB = 500
-CANDIDATE_UPLOAD_LIMIT_BYTES = CANDIDATE_UPLOAD_LIMIT_MB * 1024 * 1024
 
 # Custom color palette
 COLORS = {
@@ -375,7 +371,6 @@ def main() -> None:
             help="This platform uses AI to analyze job descriptions and rank candidates based on fit.",
         )
     with col2:
-        status_color = "🟢" if st.session_state.get("pipeline_status") == "Complete" else "🟡" if "Running" in st.session_state.get("pipeline_status", "") else "⚫"
         st.metric(
             "Status",
             st.session_state.get("pipeline_status", "Ready"),
@@ -425,20 +420,12 @@ def _init_state(default_model: str) -> None:
         "jd_text": "",
         "schema": None,
         "candidate_upload": None,
-        "upload_session_id": uuid.uuid4().hex,
         "result": None,
         "pipeline_status": "Ready",
-        "upload_polling_active": False,
-        "last_upload_check": 0.0,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
-
-
-def is_streamlit_cloud() -> bool:
-    """Check if running on Streamlit Cloud."""
-    return os.getenv("DEPLOYMENT_TARGET", "").lower() == "streamlit"
 
 
 def _skeleton_loader(height: int = 120) -> None:
@@ -457,56 +444,12 @@ def _skeleton_text(width: str = "100%") -> None:
     )
 
 
-def _streamlit_candidate_uploader() -> None:
-    """File uploader for Streamlit Cloud."""
-    st.markdown("##### 📁 Upload Candidate Dataset")
-    candidate_file = st.file_uploader(
-        "Select JSONL file (Max 500 MB)",
-        type=["jsonl"],
-        key="candidate_dataset",
-    )
-
-    if candidate_file is None:
-        return
-
-    tmp = tempfile.NamedTemporaryFile(
-        delete=False,
-        suffix=".jsonl",
-    )
-
-    tmp.write(candidate_file.getbuffer())
-    tmp.close()
-
-    st.session_state.candidate_upload = {
-        "upload_id": "streamlit-upload",
-        "filename": candidate_file.name,
-        "path": tmp.name,
-        "size": candidate_file.size,
-        "received": candidate_file.size,
-        "complete": True,
-        "error": None,
-    }
-
-    st.markdown(
-        f"""
-        <div class="card" style="background: linear-gradient(135deg, {COLORS['bg_secondary']}, {COLORS['border']});">
-            <div style="color: {COLORS['success']}; font-weight: 700; margin-bottom: 0.5rem;">✓ Upload Successful</div>
-            <div style="font-size: 0.9rem;">
-                <div><strong>File:</strong> {candidate_file.name}</div>
-                <div><strong>Size:</strong> {candidate_file.size / 1024 / 1024:.1f} MB</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def _upload_tab(settings: Any) -> None:
     """Upload tab with file inputs and pipeline trigger."""
     st.markdown("### 📤 Data Upload & Configuration")
 
-    # Three-column layout for uploads
-    col1, col2= st.columns(2)
+    # Two-column layout for JD and schema uploads
+    col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("##### 📋 Job Description")
@@ -534,10 +477,9 @@ def _upload_tab(settings: Any) -> None:
             label_visibility="collapsed",
         )
 
-
     st.markdown("---")
 
-    # Process uploads
+    # Process JD and schema uploads
     if jd_file:
         st.session_state.jd_text = read_job_description(
             jd_file.name,
@@ -553,41 +495,9 @@ def _upload_tab(settings: Any) -> None:
         )
         st.success("✓ Candidate schema loaded")
 
-    # Candidate uploader section
+    # Candidate dataset uploader
     st.markdown("### 👥 Candidate Dataset")
-
-    upload_port = int(os.getenv("CANDIDATE_UPLOAD_PORT", "8765"))
-    upload_host = os.getenv("CANDIDATE_UPLOAD_HOST", "127.0.0.1")
-    upload_base_url = os.getenv(
-        "CANDIDATE_UPLOAD_PUBLIC_URL",
-        f"http://127.0.0.1:{upload_port}"
-    )
-
-    if is_streamlit_cloud():
-        _streamlit_candidate_uploader()
-    else:
-        ensure_upload_server(upload_host, upload_port)
-
-        with st.expander(
-            "📋 How to upload your candidate file",
-            expanded=True
-        ):
-            st.markdown(
-                """
-                1. **Choose file** — click *Browse files* and select your `.jsonl` file
-                2. **Upload** — click **Upload JSONL** to start (supports up to 500 MB)
-                3. **Confirm** — click **Refresh Upload Status** once complete
-                4. **Replace** — use **Replace Candidate File** to swap files
-                """
-            )
-
-        _chunked_candidate_uploader(
-            upload_base_url,
-            st.session_state.upload_session_id
-        )
-
-        _candidate_upload_controls()
-        _render_candidate_upload_status()
+    _streamlit_candidate_uploader()
 
     # Readiness check and action button
     st.markdown("---")
@@ -627,6 +537,49 @@ def _upload_tab(settings: Any) -> None:
             use_container_width=True,
         ):
             _run_ranking_pipeline(settings)
+
+
+def _streamlit_candidate_uploader() -> None:
+    """File uploader for candidate JSONL dataset."""
+    st.markdown("##### 📁 Upload Candidate Dataset")
+    candidate_file = st.file_uploader(
+        "Select JSONL file (Max 500 MB)",
+        type=["jsonl"],
+        key="candidate_dataset",
+    )
+
+    if candidate_file is None:
+        return
+
+    tmp = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".jsonl",
+    )
+    tmp.write(candidate_file.getbuffer())
+    tmp.close()
+
+    st.session_state.candidate_upload = {
+        "upload_id": "streamlit-upload",
+        "filename": candidate_file.name,
+        "path": tmp.name,
+        "size": candidate_file.size,
+        "received": candidate_file.size,
+        "complete": True,
+        "error": None,
+    }
+
+    st.markdown(
+        f"""
+        <div class="card" style="background: linear-gradient(135deg, {COLORS['bg_secondary']}, {COLORS['border']});">
+            <div style="color: {COLORS['success']}; font-weight: 700; margin-bottom: 0.5rem;">✓ Upload Successful</div>
+            <div style="font-size: 0.9rem;">
+                <div><strong>File:</strong> {candidate_file.name}</div>
+                <div><strong>Size:</strong> {candidate_file.size / 1024 / 1024:.1f} MB</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _run_ranking_pipeline(settings: Any) -> None:
@@ -682,18 +635,8 @@ def _run_ranking_pipeline(settings: Any) -> None:
         status_placeholder.empty()
 
         st.session_state.pipeline_status = "Complete"
-
-        if not is_streamlit_cloud():
-            reset_session_upload(
-                st.session_state.upload_session_id,
-                delete_file=True
-            )
-
-        st.session_state.upload_session_id = uuid.uuid4().hex
         st.session_state.candidate_upload = None
-        st.session_state.upload_polling_active = False
 
-        # Success message
         st.markdown(
             f"""
             <div class="card" style="background: linear-gradient(135deg, {COLORS['bg_secondary']}, {COLORS['border']});">
@@ -707,9 +650,6 @@ def _run_ranking_pipeline(settings: Any) -> None:
             """,
             unsafe_allow_html=True,
         )
-
-        if not is_streamlit_cloud():
-            st.info("🔒 Uploaded candidate file securely deleted from temporary storage.")
 
     except Exception as exc:
         st.session_state.pipeline_status = f"Failed: {str(exc)}"
@@ -800,7 +740,6 @@ def _progress_tab() -> None:
             "⏳ Analysis in progress... This typically takes 5-10 minutes depending on candidate volume."
         )
 
-        # Skeleton loaders while processing
         st.markdown("#### Processing Preview")
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -841,7 +780,6 @@ def _results_tab() -> None:
         f"Showing the highest-scored candidates. This data is also available for export."
     )
 
-    # Custom dataframe styling
     st.dataframe(
         df,
         use_container_width=True,
@@ -976,7 +914,6 @@ def _export_tab() -> None:
                 </div>
             </div>
             """,
-
             unsafe_allow_html=True,
         )
         return
@@ -984,7 +921,7 @@ def _export_tab() -> None:
     st.markdown(
         f"""
         <div class="card">
-            <div style="margin-bottom: 1.5rem;">
+            <div style="">
                 <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem;">
                     📊 Top {TOP_CANDIDATE_EXPORT_LIMIT} Candidates
                 </div>
@@ -1021,389 +958,6 @@ def _score_detail(score: Any) -> dict[str, Any]:
     data = score.model_dump(exclude={"raw_candidate", "composite_score"})
     data["score"] = score.composite_score
     return data
-
-
-def _candidate_upload_controls() -> None:
-    """Display upload control buttons."""
-    st.markdown("")
-    left, right = st.columns([1, 1])
-    with left:
-        if st.button("🔄 Refresh Upload Status", use_container_width=True):
-            _refresh_candidate_upload()
-            st.rerun()
-    with right:
-        if st.button("🔁 Replace Candidate File", use_container_width=True):
-            reset_session_upload(st.session_state.upload_session_id, delete_file=True)
-            st.session_state.upload_session_id = uuid.uuid4().hex
-            st.session_state.candidate_upload = None
-            st.session_state.upload_polling_active = False
-            st.session_state.result = None
-            st.session_state.pipeline_status = "Ready"
-            st.session_state.last_upload_check = 0.0
-            st.rerun()
-
-
-def _chunked_candidate_uploader(upload_base_url: str, session_id: str) -> None:
-    """Render chunked file upload component."""
-    components.html(
-        f"""
-        <style>
-            :root {{
-                --bg-primary: {COLORS['bg_primary']};
-                --bg-secondary: {COLORS['bg_secondary']};
-                --accent-warm: {COLORS['accent_warm']};
-                --text-primary: {COLORS['text_primary']};
-                --text-secondary: {COLORS['text_secondary']};
-                --border: {COLORS['border']};
-            }}
-
-            .upload-card {{
-                border: 2px dashed var(--border);
-                border-radius: 12px;
-                padding: 2rem;
-                background: linear-gradient(135deg, var(--bg-secondary), {COLORS['bg_primary']});
-                transition: all 0.3s ease;
-            }}
-
-            .upload-card:hover {{
-                border-color: var(--accent-warm);
-                background: linear-gradient(135deg, var(--bg-secondary), {COLORS['border']});
-            }}
-
-            .upload-row {{
-                display: flex;
-                gap: 12px;
-                align-items: center;
-                flex-wrap: wrap;
-                margin-bottom: 1rem;
-            }}
-
-            .upload-title {{
-                font-size: 15px;
-                font-weight: 700;
-                color: var(--text-primary);
-                margin: 0 0 1rem;
-            }}
-
-            .upload-btn {{
-                background: linear-gradient(135deg, var(--accent-warm), {COLORS['accent_cool']});
-                color: {COLORS['bg_primary']};
-                border: none;
-                padding: 0.7rem 1.5rem;
-                border-radius: 8px;
-                cursor: pointer;
-                font-weight: 700;
-                font-size: 0.95rem;
-                transition: all 0.3s ease;
-                box-shadow: 0 4px 15px rgba(220, 158, 130, 0.2);
-            }}
-
-            .upload-btn:hover {{
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(220, 158, 130, 0.35);
-            }}
-
-            .upload-btn:disabled {{
-                opacity: 0.5;
-                cursor: not-allowed;
-                transform: none;
-            }}
-
-            .file-meta {{
-                margin-top: 1rem;
-                color: var(--text-primary);
-                font-size: 13px;
-                font-weight: 500;
-            }}
-
-            progress {{
-                width: 100%;
-                height: 8px;
-                margin: 1rem 0;
-                border-radius: 4px;
-                accent-color: var(--accent-warm);
-            }}
-
-            .stats {{
-                display: flex;
-                justify-content: space-between;
-                margin: 0.8rem 0;
-                font-size: 12px;
-                color: var(--text-secondary);
-                gap: 8px;
-            }}
-
-            .upload-status {{
-                margin-top: 1rem;
-                font-weight: 600;
-                color: var(--accent-warm);
-                font-size: 0.9rem;
-            }}
-
-            input[type="file"] {{
-                color: var(--text-primary);
-                accent-color: var(--accent-warm);
-            }}
-
-            input[type="file"]::file-selector-button {{
-                background: var(--bg-secondary);
-                color: var(--text-primary);
-                border: 1px solid var(--border);
-                padding: 0.5rem 1rem;
-                border-radius: 6px;
-                cursor: pointer;
-                font-weight: 600;
-                transition: all 0.3s ease;
-            }}
-
-            input[type="file"]::file-selector-button:hover {{
-                border-color: var(--accent-warm);
-                background: {COLORS['border']};
-            }}
-        </style>
-
-        <div class="upload-card">
-            <div class="upload-title">📁 Browse & Upload JSONL File</div>
-            <div class="upload-row">
-                <input id="candidate-file" type="file" accept=".jsonl" />
-                <button id="upload-button" class="upload-btn">Upload JSONL</button>
-            </div>
-
-            <div id="file-info" class="file-meta">
-                No file selected. Maximum size: {CANDIDATE_UPLOAD_LIMIT_MB} MB
-            </div>
-
-            <progress id="upload-progress" max="100" value="0"></progress>
-
-            <div class="stats">
-                <span id="uploaded-size">0 MB / 0 MB</span>
-                <span id="speed">0 MB/s</span>
-                <span id="eta">ETA --</span>
-            </div>
-
-            <div id="upload-status" class="upload-status"></div>
-        </div>
-
-        <script>
-            const baseUrl = {upload_base_url!r};
-            const sessionId = {session_id!r};
-
-            const maxBytes = {CANDIDATE_UPLOAD_LIMIT_BYTES};
-            const chunkSize = 4 * 1024 * 1024;
-            const maxAttempts = 3;
-
-            const fileInput = document.getElementById("candidate-file");
-            const uploadBtn = document.getElementById("upload-button");
-            const progress = document.getElementById("upload-progress");
-            const status = document.getElementById("upload-status");
-            const fileInfo = document.getElementById("file-info");
-            const uploadedSize = document.getElementById("uploaded-size");
-            const speedText = document.getElementById("speed");
-            const etaText = document.getElementById("eta");
-
-            function formatMB(bytes) {{
-                return (bytes / 1024 / 1024).toFixed(1);
-            }}
-
-            function setStatus(text, color = "var(--accent-warm)") {{
-                status.innerText = text;
-                status.style.color = color;
-            }}
-
-            async function fetchWithRetry(url, options) {{
-                let lastError;
-                for (let attempt = 1; attempt <= maxAttempts; attempt++) {{
-                    try {{
-                        const response = await fetch(url, options);
-                        if (response.ok || response.status === 409 || response.status === 413) {{
-                            return response;
-                        }}
-                        lastError = new Error(`HTTP ${{response.status}}`);
-                    }} catch (error) {{
-                        lastError = error;
-                    }}
-                    await new Promise(resolve => setTimeout(resolve, 350 * attempt));
-                }}
-                throw lastError;
-            }}
-
-            fileInput.addEventListener("change", () => {{
-                const file = fileInput.files[0];
-                if (!file) {{
-                    fileInfo.innerText = "No file selected. Maximum size: {CANDIDATE_UPLOAD_LIMIT_MB} MB";
-                    return;
-                }}
-                fileInfo.innerHTML = `<strong>${{file.name}}</strong> · ${{formatMB(file.size)}} MB`;
-                progress.value = 0;
-                setStatus("");
-            }});
-
-            uploadBtn.addEventListener("click", async () => {{
-                const file = fileInput.files[0];
-
-                if (!file) {{
-                    setStatus("⚠️ Select a JSONL file first.", "var(--accent-warm)");
-                    return;
-                }}
-
-                if (!file.name.toLowerCase().endsWith(".jsonl")) {{
-                    setStatus("⚠️ Only JSONL files are supported.", "var(--accent-warm)");
-                    return;
-                }}
-
-                if (file.size > maxBytes) {{
-                    setStatus("❌ File exceeds 500MB limit.", "#ff6b6b");
-                    return;
-                }}
-
-                uploadBtn.disabled = true;
-                const startTime = Date.now();
-
-                try {{
-                    setStatus("⏳ Initializing upload...");
-
-                    const startResponse = await fetchWithRetry(
-                        `${{baseUrl}}/uploads/start`,
-                        {{
-                            method: "POST",
-                            headers: {{"Content-Type": "application/json"}},
-                            body: JSON.stringify({{
-                                filename: file.name,
-                                size: file.size,
-                                session_id: sessionId
-                            }})
-                        }}
-                    );
-
-                    const startPayload = await startResponse.json();
-                    if (!startResponse.ok) throw new Error(startPayload.error);
-
-                    const uploadId = startPayload.upload.upload_id;
-                    let offset = 0;
-
-                    while (offset < file.size) {{
-                        const chunk = file.slice(offset, offset + chunkSize);
-
-                        const response = await fetchWithRetry(
-                            `${{baseUrl}}/uploads/${{uploadId}}/chunk`,
-                            {{
-                                method: "POST",
-                                headers: {{"X-Chunk-Offset": String(offset)}},
-                                body: chunk
-                            }}
-                        );
-
-                        const payload = await response.json();
-                        if (!response.ok) throw new Error(payload.error);
-
-                        offset += chunk.size;
-                        const percent = Math.round(offset / file.size * 100);
-                        progress.value = percent;
-
-                        const elapsed = (Date.now() - startTime) / 1000;
-                        const speed = offset / elapsed;
-                        const remaining = (file.size - offset) / Math.max(speed, 1);
-
-                        uploadedSize.innerText = `${{formatMB(offset)}} / ${{formatMB(file.size)}} MB`;
-                        speedText.innerText = `${{formatMB(speed)}} MB/s`;
-                        etaText.innerText = `ETA ${{Math.round(remaining)}}s`;
-                        setStatus(`⏳ Uploading... ${{percent}}%`);
-                    }}
-
-                    const completeResponse = await fetchWithRetry(
-                        `${{baseUrl}}/uploads/${{uploadId}}/complete`,
-                        {{method: "POST"}}
-                    );
-
-                    const completePayload = await completeResponse.json();
-                    if (!completeResponse.ok) throw new Error(completePayload.error);
-
-                    progress.value = 100;
-                    setStatus("✓ Upload completed successfully!", "#66d9a6");
-                }} catch(err) {{
-                    setStatus(`❌ Upload failed: ${{err.message}}`, "#ff6b6b");
-                }} finally {{
-                    uploadBtn.disabled = false;
-                }}
-            }});
-        </script>
-        """,
-        height=260,
-    )
-
-
-def _refresh_candidate_upload() -> None:
-    """Fetch latest upload state from server."""
-    state = latest_session_upload(st.session_state.upload_session_id)
-    st.session_state.candidate_upload = None if state is None else {
-        "upload_id": state.upload_id,
-        "filename": state.filename,
-        "path": state.path,
-        "size": state.size,
-        "received": state.received,
-        "complete": state.complete,
-        "error": state.error,
-    }
-    st.session_state.last_upload_check = time.time()
-
-
-def _render_candidate_upload_status() -> None:
-    """Display upload status with smart auto-polling."""
-    _refresh_candidate_upload()
-
-    upload = st.session_state.candidate_upload
-
-    if not upload:
-        st.info("📤 No candidate dataset uploaded yet.")
-        return
-
-    st.markdown("#### 📊 Upload Status")
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("📄 Filename", upload["filename"][-20:] if len(upload["filename"]) > 20 else upload["filename"])
-
-    with col2:
-        st.metric("💾 Total Size", f"{upload['size']/1024/1024:.1f} MB")
-
-    with col3:
-        st.metric("⬆️ Received", f"{upload['received']/1024/1024:.1f} MB")
-
-    with col4:
-        status_text = "✓ Ready" if upload.get("complete") else "⏳ Uploading"
-        st.metric("🔄 Status", status_text)
-
-    percent = (upload["received"] / upload["size"] * 100) if upload["size"] else 0
-    st.progress(min(100, int(percent)))
-
-    if upload.get("complete"):
-        st.markdown(
-            f"""
-            <div class="card" style="background: linear-gradient(135deg, {COLORS['bg_secondary']}, {COLORS['border']});">
-                <div style="color: {COLORS['success']}; font-weight: 700; margin-bottom: 1rem; font-size: 1.1rem;">
-                    ✓ Dataset Ready for Ranking
-                </div>
-                <div style="font-size: 0.9rem; line-height: 1.6;">
-                    <div><strong>File:</strong> {upload['filename']}</div>
-                    <div><strong>Size:</strong> {upload['size']/1024/1024:.1f} MB</div>
-                    <div style="margin-top: 0.5rem; color: {COLORS['text_secondary']};">Ready to proceed with ranking analysis.</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.session_state.upload_polling_active = False
-    elif upload.get("error"):
-        st.error(f"❌ Upload error: {upload['error']}")
-        st.session_state.upload_polling_active = False
-    else:
-        st.info(f"⏳ Uploading... {percent:.1f}% complete")
-        current_time = time.time()
-        if not st.session_state.upload_polling_active or (current_time - st.session_state.last_upload_check) >= 1.5:
-            st.session_state.upload_polling_active = True
-            time.sleep(1.5)
-            st.rerun()
 
 
 if __name__ == "__main__":
