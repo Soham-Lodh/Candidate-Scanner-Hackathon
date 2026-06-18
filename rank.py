@@ -10,7 +10,8 @@ from pathlib import Path
 
 from candidate_ranker.config import load_settings
 from candidate_ranker.export import rankings_to_csv
-from candidate_ranker.ingestion import read_job_description, read_schema
+from candidate_ranker.ingestion import read_schema
+from candidate_ranker.models import JDIntelligence
 from candidate_ranker.services import run_pipeline_from_jsonl
 
 
@@ -23,14 +24,9 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Path to candidates .jsonl or .jsonl.gz",
     )
-    parser.add_argument("--job-description", required=True, help="Path to job description file")
+    parser.add_argument("--jd-cache", required=True, help="Path to prepared JD intelligence JSON")
     parser.add_argument("--schema", required=True, help="Path to candidate JSON schema")
     parser.add_argument("--out", required=True, help="Path for submission CSV output")
-    parser.add_argument(
-        "--model",
-        default=None,
-        help="Optional OpenRouter model override. Defaults to OPENROUTER_PRIMARY_MODEL.",
-    )
     return parser.parse_args()
 
 
@@ -51,34 +47,30 @@ def _validate_candidate_path(path: Path) -> None:
 async def _run() -> None:
     args = parse_args()
     candidate_path = Path(args.candidates)
-    jd_path = Path(args.job_description)
+    jd_cache_path = Path(args.jd_cache)
     schema_path = Path(args.schema)
     out_path = Path(args.out)
 
-    _require_file(jd_path, "Job description")
+    _require_file(jd_cache_path, "JD cache")
     _require_file(schema_path, "Candidate schema")
     _require_file(candidate_path, "Candidate dataset")
     _validate_candidate_path(candidate_path)
 
-    print("Loading job description...")
-    jd_text = read_job_description(jd_path.name, jd_path.read_bytes())
-    if not jd_text.strip():
-        raise ValueError(f"Job description is empty or could not be read: {jd_path}")
+    print("Loading JD intelligence...")
+    jd_intelligence = JDIntelligence.model_validate_json(jd_cache_path.read_text(encoding="utf-8"))
 
     print("Loading schema...")
     schema = read_schema(schema_path.read_bytes())
 
     print("Loading candidates...")
     settings = load_settings()
-    model = args.model or settings.openrouter_primary_model
 
     print("Running ranking...")
     result = await run_pipeline_from_jsonl(
-        jd_text=jd_text,
         candidate_path=str(candidate_path),
         schema=schema,
         settings=settings,
-        model=model,
+        jd_intelligence=jd_intelligence,
     )
 
     print(f"Writing {out_path}...")

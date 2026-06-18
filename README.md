@@ -66,6 +66,9 @@ The `SchemaMap` layer means this platform works with any candidate JSON structur
 **LLM Used Surgically**
 The AI layer is intentionally narrow: it extracts structured JD intelligence once. All ranking, retrieval, and scoring runs locally and deterministically.
 
+**Offline Ranking Pipeline**
+After one-time JD preparation, the ranking pipeline executes locally without network access.
+
 **Integrity & Fraud Detection**
 Built-in checks flag candidates with signals of inflated credentials, inconsistent experience claims, or other integrity concerns, which factor into their composite score.
 
@@ -117,6 +120,14 @@ app.py
 - Pydantic models enforce strict data contracts throughout the pipeline
 - FAISS retrieval degrades gracefully to a deterministic NumPy fallback with zero user impact
 
+### Execution Model
+
+- Pre-computation extracts structured JD intelligence once for each job description.
+- Ranking consumes the cached JD intelligence.
+- Candidate retrieval, scoring, and CSV generation run entirely offline.
+- The final ranking command performs no hosted LLM calls and no network requests.
+- This keeps expensive AI work outside the ranking pipeline.
+
 ---
 
 ## Running Locally
@@ -139,30 +150,50 @@ pip install -r requirements.txt
 cp .env.example .env
 # Open .env and set your OPENROUTER_API_KEY
 
-# 5. Launch the app
+# 5. Launch the interactive UI
 streamlit run app.py
 ```
 
-The app will open at `http://localhost:8501`.
+The app will open at `http://localhost:8501`. Command-line reproduction is documented in the Stage 3 section below.
 
 ---
 
 ## Stage 3 Code Reproduction
 
-Run the same ranking pipeline used by the Streamlit app without opening the UI:
+Stage 3 uses a two-phase flow so the final ranking step is fully offline.
+
+### Phase 1 - Pre-computation
+
+Run this once per job description. This step requires internet access, calls OpenRouter, and generates a reusable JD cache.
 
 ```bash
-python rank.py `
-  --candidates test2/candidates.jsonl `
-  --job-description test2/job_description.md `
-  --schema test2/candidate_schema.json `
-  --out test_submission.csv
+python prepare.py \
+    --job-description ./job_description.md \
+    --schema ./candidate_schema.json \
+    --out ./jd_cache.json
 ```
 
-The candidate file may be `.jsonl` or `.jsonl.gz`. The generated `submission.csv` contains exactly:
+### Phase 2 - Offline Ranking
+
+This is the command used to generate the submission CSV. It performs no hosted LLM calls and no network requests.
+
+```bash
+python rank.py \
+    --candidates ./candidates.jsonl \
+    --jd-cache ./jd_cache.json \
+    --schema ./candidate_schema.json \
+    --out ./submission.csv
+```
+
+Candidates may be either `.jsonl` or `.jsonl.gz`.
+
+The output CSV contains:
 
 ```text
-candidate_id,rank,score,reasoning
+candidate_id
+rank
+score
+reasoning
 ```
 
 ---
