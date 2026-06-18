@@ -1,0 +1,8 @@
+.venv
+venv
+__pycache__
+.git
+work
+*.csv
+*.jsonl
+.cache
