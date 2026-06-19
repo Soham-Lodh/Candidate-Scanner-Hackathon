@@ -61,7 +61,7 @@ This solution was built and validated against the challenge's hardware and runti
 | **Deployed platform runtime** | 5–10 minutes (Streamlit Cloud free tier) |
 
 A demo video of the app running the full 100K dataset inside a Docker container with 16 GB RAM and 1 CPU is available here:  
-📹 **[Video Demo (Google Drive)](https://drive.google.com/file/d/1oaXk3lAKvakBYTxYfUGXT7ErSMVgbBMU/view?usp=sharing)**
+📹 **[Video Demo (Google Drive)](https://drive.google.com/drive/folders/1CSKugCC6FlCjdih-3ZUJ_vJ3DyQI-QRy)**
 
 ### How We Meet the Compute Constraints
 
@@ -572,7 +572,7 @@ Early export CSV reasoning outputs were AI-generated and generic: "Strong candid
 |---|---|
 | 🌐 **Live App** | [ai-candidate-ranker-hackathon.streamlit.app](https://ai-candidate-ranker-hackathon.streamlit.app/) |
 | 💻 **GitHub Repository** | [github.com/Soham-Lodh/Candidate-Scanner-Hackathon](https://github.com/Soham-Lodh/Candidate-Scanner-Hackathon) |
-| 📹 **Demo Video + Submission CSV** | [Google Drive](https://drive.google.com/file/d/1oaXk3lAKvakBYTxYfUGXT7ErSMVgbBMU/view?usp=sharing) |
+| 📹 **Demo Video + Submission CSV** | [Google Drive](https://drive.google.com/drive/folders/1CSKugCC6FlCjdih-3ZUJ_vJ3DyQI-QRy) |
 
 The demo video shows the full pipeline running inside Docker with 16 GB RAM and a single CPU — including the ranked candidate CSV output generated from the 100K dataset.
 
