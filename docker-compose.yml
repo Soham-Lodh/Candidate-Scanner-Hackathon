@@ -6,7 +6,7 @@ services:
     container_name: candidate-scanner
     mem_limit: 16g
     memswap_limit: 16g
-    cpus: "8"
+    cpus: "1"
 
     ports:
       - "8501:8501"
