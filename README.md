@@ -148,7 +148,7 @@ pip install -r requirements.txt
 
 # 4. Configure environment variables
 cp .env.example .env
-# Open .env and set your OPENROUTER_API_KEY
+# Open .env and set your OPENROUTER_API_KEY, 
 
 # 5. Launch the interactive UI
 streamlit run app.py
@@ -160,23 +160,30 @@ The app will open at `http://localhost:8501`. Command-line reproduction is docum
 
 ## Stage 3 Code Reproduction
 
-Stage 3 uses a two-phase flow so the final ranking step is fully offline.
+Stage 3 uses a two-phase flow so the final ranking step is fully offline. First create a virtual environment and install the requirements from requirements.txt the commands the present above for reference then run tese for these.
 
 ### Phase 1 - Pre-computation
 
 Run this once per job description. This step requires internet access, calls OpenRouter, and generates a reusable JD cache.
 
+In windows powershell (The job description file can have extension like .pdf, .docx, .md)
 ```bash
 python prepare.py `
-  --job-description test2/job_description.md `
+  --job-description test2/job_description.docx `
   --schema test2/candidate_schema.json `
   --out jd_cache.json
+```
+
+In git bash
+```bash
+python prepare.py --job-description test2/job_description.docx --schema test2/candidate_schema.json --out jd_cache.json
 ```
 
 ### Phase 2 - Offline Ranking
 
 This is the command used to generate the submission CSV. It performs no hosted LLM calls and no network requests.
 
+In windows powershell
 ```bash
 python rank.py `
   --candidates test2/candidates.jsonl `
@@ -184,6 +191,12 @@ python rank.py `
   --schema test2/candidate_schema.json `
   --out submission.csv
 ```
+
+In gitbash
+```bash
+python rank.py --candidates test2/candidates.jsonl --jd-cache jd_cache.json --schema test2/candidate_schema.json --out submission.csv
+```
+
 
 Candidates may be either `.jsonl` or `.jsonl.gz`.
 
@@ -195,18 +208,6 @@ rank
 score
 reasoning
 ```
-
----
-
-## Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `OPENROUTER_API_KEY` | Yes | Your OpenRouter API key for LLM calls |
-| `DEPLOYMENT_TARGET` | No | Set to `streamlit` when running on Streamlit Cloud |
-| `CANDIDATE_UPLOAD_PORT` | No | Port for the local chunked upload server (default: `8765`) |
-| `CANDIDATE_UPLOAD_HOST` | No | Host for the upload server (default: `127.0.0.1`) |
-| `CANDIDATE_UPLOAD_PUBLIC_URL` | No | Public URL for the upload server |
 
 ---
 
