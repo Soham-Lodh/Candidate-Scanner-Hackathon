@@ -53,7 +53,9 @@ This solution was built and validated against the challenge's hardware and runti
 
 | Metric | Value |
 |---|---|
-| **Runtime (100K candidates)** | **5 minutes 26.162 seconds** |
+| **End-to-End Pipeline Runtime (100K Candidates)** | **4 minutes 57.91 seconds** |
+| **Job Description Intelligence Extraction (LLM Processing)** | **24.30 seconds** |
+| **Offline Candidate Ranking Runtime (Post-JD Analysis)** | **3 minutes 53.18 seconds** |
 | **Hardware** | CPU only — no GPU required |
 | **Memory** | 16 GB RAM |
 | **Dataset size** | 100,000+ candidate records |
