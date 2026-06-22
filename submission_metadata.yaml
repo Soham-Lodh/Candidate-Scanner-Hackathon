@@ -1,0 +1,58 @@
+team_name: "Code Paradox"
+
+primary_contact:
+  name: "Soham Lodh"
+  email: "24155354@kiit.ac.in"
+  phone: "+91-8334822932"
+team_members:
+  - name: "Soham Lodh"
+    email: "24155354@kiit.ac.in"
+    role: "Team Leader,ML Engineer, Streamlit Developer"
+  - name: "Dhrupad Paitandy"
+    email: "dhrupadpaitandy@gmail.com"
+    role: "ML Engineer, Python Developer"
+
+github_repo: "https://github.com/Soham-Lodh/Candidate-Scanner-Hackathon"
+
+sandbox_link: "https://ai-candidate-ranker-hackathon.streamlit.app/"
+
+reproduce_command: |
+  python prepare.py --job-description ./job_description.docx --schema ./candidate_schema.json --out ./jd_cache.json
+  python rank.py --candidates ./candidates.jsonl --jd-cache ./jd_cache.json --schema ./candidate_schema.json --out ./submission.csv
+
+compute:
+  platform: "Docker"
+  cpu_cores: 1
+  ram_gb: 16
+  python_version: "3.11"
+  os: "Linux (python:3.11-slim)"
+  uses_gpu_for_inference: false
+  has_network_during_ranking: false
+  pre_computation_required: true
+  pre_computation_time_minutes: 0.5
+
+ai_tools_used:
+  - "Claude"
+  - "Codex"
+  - "ChatGPT"
+  - "Gamma"
+
+ai_usage_summary: |
+  Claude was used for architecture design, code reviews, and implementation planning.
+  OpenAI Codex assisted with code generation, debugging, and feature implementation.
+  ChatGPT was used for bug fixing, debugging, and iterative improvements.
+  Gamma was used to create and organize presentation content.
+  All candidate ranking logic, scoring methodology, and final evaluation behavior were implemented and validated by the team.
+
+methodology_summary: |
+  The system uses a two-stage ranking pipeline designed for scalability, explainability, and reproducibility. First, an LLM analyzes the job description once and extracts structured hiring intelligence, including required skills, seniority, experience expectations, responsibilities, education, location preferences, and behavioral signals. This output is cached and reused, ensuring no LLM calls are required during candidate ranking.
+  Candidate schemas are mapped dynamically, allowing the platform to adapt to different JSON structures without hardcoded field names. A semantic retrieval layer (FAISS + embeddings, with deterministic fallback support) narrows large candidate pools before detailed evaluation.
+  Retrieved candidates are scored using a deterministic multi-signal engine combining technical fit, role relevance, behavioral indicators, and trust/integrity signals. The methodology evaluates factors such as skill coverage, experience alignment, semantic relevance, seniority fit, career consistency, production experience, availability, education, and profile quality. Must-have requirements act as gating signals, while integrity heuristics penalize suspicious, incomplete, or keyword-stuffed profiles.
+  Final rankings are generated through weighted composite scoring and accompanied by evidence-based explanations, producing transparent, auditable, and reproducible hiring recommendations at 100K+ candidate scale on CPU-only infrastructure.
+
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true
+  reproduction_tested: true

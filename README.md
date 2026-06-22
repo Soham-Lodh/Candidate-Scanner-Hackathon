@@ -396,16 +396,16 @@ This step calls OpenRouter once to extract structured JD intelligence and writes
 **Git Bash / macOS / Linux:**
 ```bash
 python prepare.py \
-  --job-description test2/job_description.docx \
-  --schema test2/candidate_schema.json \
+  --job-description ./job_description.docx \
+  --schema ./candidate_schema.json \
   --out jd_cache.json
 ```
 
 **Windows PowerShell:**
 ```powershell
 python prepare.py `
-  --job-description test2/job_description.docx `
-  --schema test2/candidate_schema.json `
+  --job-description ./job_description.docx `
+  --schema ./candidate_schema.json `
   --out jd_cache.json
 ```
 
@@ -431,18 +431,18 @@ This is the command used to generate the submission CSV. It performs **no LLM ca
 **Git Bash / macOS / Linux:**
 ```bash
 python rank.py \
-  --candidates test2/candidates.jsonl \
+  --candidates ./candidates.jsonl \
   --jd-cache jd_cache.json \
-  --schema test2/candidate_schema.json \
+  --schema ./candidate_schema.json \
   --out submission.csv
 ```
 
 **Windows PowerShell:**
 ```powershell
 python rank.py `
-  --candidates test2/candidates.jsonl `
+  --candidates ./candidates.jsonl `
   --jd-cache jd_cache.json `
-  --schema test2/candidate_schema.json `
+  --schema ./candidate_schema.json `
   --out submission.csv
 ```
 
