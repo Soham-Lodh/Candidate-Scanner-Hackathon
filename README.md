@@ -1,6 +1,6 @@
 # AI Candidate Ranking Platform
 
-> **Team Code Paradox** — *Data & AI Challenge: Intelligent Candidate Discovery*  
+> **Team CodeParadox** — *Data & AI Challenge: Intelligent Candidate Discovery*  
 > Built by Soham Lodh and Dhrupad Paitandy to answer one question most systems ignore:  
 > _Not "does this candidate match the skills?" — but "what is the probability this candidate gets hired?"_
 
